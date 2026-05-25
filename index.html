@@ -160,7 +160,9 @@
   }
 
   .event .location {
-    margin-top: 4px;
+    margin-top: 1px;
+    padding: 3px 9px;
+    border-radius: 9px;
     font-size: 0.8rem;
     font-weight: 400;
     color: var(--muted);
@@ -169,8 +171,10 @@
     gap: 5px;
     text-decoration: none;
     cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
   }
   .event .location svg { flex: none; opacity: 0.9; }
+  .event .location:active { background: var(--chip); }
   .event.is-active .location { color: var(--today); }
 
   .event .meta {
@@ -703,7 +707,12 @@
     el.className = "event" + (isPast(ev) ? " is-past" : "");
     el.dataset.id = ev.id;
     el.style.setProperty("--cat", c.color);
-    el.addEventListener("click", function () { openEdit(ev.id); });
+    el.addEventListener("click", function (e) {
+      // Don't open the editor when a link inside the card (e.g. the map
+      // location, including its pin icon) is tapped.
+      if (e.target.closest && e.target.closest("a")) return;
+      openEdit(ev.id);
+    });
 
     var dot = document.createElement("div");
     dot.className = "dot";
