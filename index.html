@@ -1,0 +1,473 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<title>Timeline</title>
+<style>
+  :root {
+    --bg: #f5f5f7;
+    --ink: #1d1d1f;
+    --muted: #86868b;
+    --line: #d2d2d7;
+    --accent: #1d1d1f;
+    --maxScale: 1.9;
+    --minScale: 0.62;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html, body { height: 100%; }
+
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+    overflow-x: hidden;
+    overflow-y: scroll;
+    scroll-snap-type: y proximity;
+    overscroll-behavior: none;
+  }
+
+  /* The single vertical line, fixed in the middle of the screen */
+  .rail {
+    position: fixed;
+    top: 0;
+    bottom: 0;
+    left: 50%;
+    width: 2px;
+    transform: translateX(-50%);
+    background: linear-gradient(
+      to bottom,
+      transparent 0%,
+      var(--line) 12%,
+      var(--line) 88%,
+      transparent 100%
+    );
+    z-index: 0;
+    pointer-events: none;
+  }
+
+  /* Subtle focus band marking the magnification center */
+  .focus-band {
+    position: fixed;
+    left: 0;
+    right: 0;
+    top: 50%;
+    height: 1px;
+    transform: translateY(-50%);
+    z-index: 0;
+    pointer-events: none;
+  }
+
+  .events {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 15vh;
+    padding: 50vh 0;
+    width: 100%;
+  }
+
+  .event {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+    scroll-snap-align: center;
+    transform-origin: center center;
+    will-change: transform, opacity;
+    cursor: default;
+    user-select: none;
+  }
+
+  .event .dot {
+    width: 13px;
+    height: 13px;
+    border-radius: 50%;
+    background: var(--accent);
+    /* ring in page colour visually breaks the rail so dots read as beads */
+    box-shadow: 0 0 0 7px var(--bg);
+    transition: background 0.2s ease;
+  }
+
+  .event .card {
+    background: var(--bg);
+    padding: 4px 22px;
+    border-radius: 16px;
+    text-align: center;
+    white-space: nowrap;
+  }
+
+  .event .date {
+    font-size: 1.35rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    line-height: 1.15;
+  }
+
+  .event .year {
+    font-size: 0.62rem;
+    font-weight: 600;
+    letter-spacing: 0.16em;
+    color: var(--muted);
+    margin-top: 2px;
+  }
+
+  .event .title {
+    margin-top: 6px;
+    font-size: 0.98rem;
+    font-weight: 400;
+    color: var(--muted);
+    letter-spacing: 0.01em;
+  }
+
+  /* The active (centred) event gets a darker title + accent dot */
+  .event.is-active .title { color: var(--ink); }
+  .event.is-active .dot { background: #0071e3; }
+
+  .empty {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--muted);
+    font-size: 1rem;
+    z-index: 1;
+    pointer-events: none;
+  }
+
+  /* Add button, top-right */
+  .add-btn {
+    position: fixed;
+    top: 22px;
+    right: 24px;
+    width: 46px;
+    height: 46px;
+    border-radius: 50%;
+    border: none;
+    background: var(--ink);
+    color: #fff;
+    font-size: 26px;
+    line-height: 1;
+    font-weight: 300;
+    cursor: pointer;
+    z-index: 10;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.16);
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding-bottom: 3px;
+  }
+  .add-btn:hover { transform: scale(1.07); box-shadow: 0 6px 18px rgba(0, 0, 0, 0.22); }
+  .add-btn:active { transform: scale(0.96); }
+
+  /* Modal */
+  .overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.28);
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 20;
+  }
+  .overlay.open { display: flex; }
+
+  .modal {
+    background: #fff;
+    width: min(92vw, 380px);
+    border-radius: 20px;
+    padding: 26px 24px 22px;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.28);
+  }
+  .modal h2 {
+    font-size: 1.15rem;
+    font-weight: 600;
+    margin-bottom: 18px;
+  }
+  .field { margin-bottom: 14px; }
+  .field label {
+    display: block;
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 6px;
+  }
+  .field input {
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    font-size: 0.95rem;
+    font-family: inherit;
+    color: var(--ink);
+    background: #fbfbfd;
+    outline: none;
+    transition: border-color 0.15s ease;
+  }
+  .field input:focus { border-color: #0071e3; }
+  .row { display: flex; gap: 12px; }
+  .row .field { flex: 1; }
+
+  .actions {
+    display: flex;
+    gap: 10px;
+    margin-top: 20px;
+  }
+  .actions button {
+    flex: 1;
+    padding: 11px 0;
+    border-radius: 11px;
+    font-size: 0.95rem;
+    font-weight: 500;
+    font-family: inherit;
+    cursor: pointer;
+    border: none;
+    transition: opacity 0.15s ease;
+  }
+  .actions button:hover { opacity: 0.85; }
+  .btn-cancel { background: #e8e8ed; color: var(--ink); }
+  .btn-save { background: var(--ink); color: #fff; }
+</style>
+</head>
+<body>
+  <div class="rail"></div>
+  <div class="focus-band"></div>
+
+  <button class="add-btn" id="addBtn" title="Add event" aria-label="Add event">+</button>
+
+  <div class="events" id="events"></div>
+  <div class="empty" id="empty" hidden>No events yet — tap + to add one</div>
+
+  <div class="overlay" id="overlay">
+    <form class="modal" id="form">
+      <h2>Add event</h2>
+      <div class="field">
+        <label for="title">Event</label>
+        <input id="title" type="text" placeholder="e.g. SCCA Laguna Seca" required />
+      </div>
+      <div class="row">
+        <div class="field">
+          <label for="start">Start date</label>
+          <input id="start" type="date" required />
+        </div>
+        <div class="field">
+          <label for="end">End date <span style="text-transform:none;font-weight:400;">(optional)</span></label>
+          <input id="end" type="date" />
+        </div>
+      </div>
+      <div class="actions">
+        <button type="button" class="btn-cancel" id="cancelBtn">Cancel</button>
+        <button type="submit" class="btn-save">Add</button>
+      </div>
+    </form>
+  </div>
+
+<script>
+(function () {
+  "use strict";
+
+  var STORE_KEY = "timeline.events.v1";
+  var MONTHS = ["JAN","FEB","MAR","APR","MAY","JUN","JUL","AUG","SEP","OCT","NOV","DEC"];
+
+  var SEED = [
+    { start: "2026-05-28", end: "2026-05-30", title: "Thunderhill — California" },
+    { start: "2026-06-12", end: "2026-06-14", title: "Flight Sim Expo" },
+    { start: "2026-06-26", end: "",           title: "SCCA Laguna Seca" }
+  ];
+
+  var eventsEl = document.getElementById("events");
+  var emptyEl = document.getElementById("empty");
+  var overlay = document.getElementById("overlay");
+  var form = document.getElementById("form");
+
+  var events = load();
+  var nodes = []; // cached {el, label} for the magnification loop
+
+  function load() {
+    try {
+      var raw = localStorage.getItem(STORE_KEY);
+      if (raw) return JSON.parse(raw);
+    } catch (e) {}
+    return SEED.slice();
+  }
+
+  function save() {
+    try { localStorage.setItem(STORE_KEY, JSON.stringify(events)); } catch (e) {}
+  }
+
+  function parseDate(s) { return new Date(s + "T00:00:00"); }
+
+  function formatDate(start, end) {
+    var s = parseDate(start);
+    if (!end || end === start) {
+      return MONTHS[s.getMonth()] + " " + s.getDate();
+    }
+    var e = parseDate(end);
+    if (s.getMonth() === e.getMonth() && s.getFullYear() === e.getFullYear()) {
+      return MONTHS[s.getMonth()] + " " + s.getDate() + "–" + e.getDate();
+    }
+    return MONTHS[s.getMonth()] + " " + s.getDate() + " – " + MONTHS[e.getMonth()] + " " + e.getDate();
+  }
+
+  function render() {
+    events.sort(function (a, b) { return parseDate(a.start) - parseDate(b.start); });
+
+    eventsEl.innerHTML = "";
+    nodes = [];
+
+    var currentYear = new Date().getFullYear();
+
+    events.forEach(function (ev) {
+      var el = document.createElement("div");
+      el.className = "event";
+
+      var dot = document.createElement("div");
+      dot.className = "dot";
+
+      var card = document.createElement("div");
+      card.className = "card";
+
+      var date = document.createElement("div");
+      date.className = "date";
+      date.textContent = formatDate(ev.start, ev.end);
+      card.appendChild(date);
+
+      var yr = parseDate(ev.start).getFullYear();
+      if (yr !== currentYear) {
+        var year = document.createElement("div");
+        year.className = "year";
+        year.textContent = yr;
+        card.appendChild(year);
+      }
+
+      var title = document.createElement("div");
+      title.className = "title";
+      title.textContent = ev.title;
+      card.appendChild(title);
+
+      el.appendChild(dot);
+      el.appendChild(card);
+      eventsEl.appendChild(el);
+
+      nodes.push(el);
+    });
+
+    emptyEl.hidden = events.length > 0;
+    requestUpdate();
+  }
+
+  // ---- Dock magnification ----------------------------------------------
+  var ticking = false;
+
+  function requestUpdate() {
+    if (ticking) return;
+    ticking = true;
+    requestAnimationFrame(update);
+  }
+
+  function update() {
+    ticking = false;
+    var center = window.innerHeight / 2;
+    var R = window.innerHeight * 0.55; // influence radius
+    var maxScale = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--maxScale")) || 1.9;
+    var minScale = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--minScale")) || 0.62;
+
+    var closest = null;
+    var closestDist = Infinity;
+
+    for (var i = 0; i < nodes.length; i++) {
+      var el = nodes[i];
+      var rect = el.getBoundingClientRect();
+      var elCenter = rect.top + rect.height / 2;
+      var dist = Math.abs(elCenter - center);
+
+      // Smooth cosine falloff: 1 at centre, 0 beyond radius R
+      var t = Math.min(dist, R) / R;
+      var falloff = (Math.cos(t * Math.PI) + 1) / 2;
+
+      var scale = minScale + (maxScale - minScale) * falloff;
+      var opacity = 0.22 + 0.78 * falloff;
+
+      el.style.transform = "scale(" + scale.toFixed(3) + ")";
+      el.style.opacity = opacity.toFixed(3);
+      el.style.zIndex = String(Math.round(falloff * 100));
+
+      if (dist < closestDist) { closestDist = dist; closest = el; }
+    }
+
+    for (var j = 0; j < nodes.length; j++) {
+      nodes[j].classList.toggle("is-active", nodes[j] === closest);
+    }
+  }
+
+  window.addEventListener("scroll", requestUpdate, { passive: true });
+  window.addEventListener("resize", requestUpdate);
+
+  // ---- Add-event modal --------------------------------------------------
+  function openModal() {
+    overlay.classList.add("open");
+    document.getElementById("title").focus();
+  }
+  function closeModal() {
+    overlay.classList.remove("open");
+    form.reset();
+  }
+
+  document.getElementById("addBtn").addEventListener("click", openModal);
+  document.getElementById("cancelBtn").addEventListener("click", closeModal);
+  overlay.addEventListener("click", function (e) { if (e.target === overlay) closeModal(); });
+  document.addEventListener("keydown", function (e) { if (e.key === "Escape") closeModal(); });
+
+  form.addEventListener("submit", function (e) {
+    e.preventDefault();
+    var title = document.getElementById("title").value.trim();
+    var start = document.getElementById("start").value;
+    var end = document.getElementById("end").value;
+    if (!title || !start) return;
+    if (end && parseDate(end) < parseDate(start)) end = start;
+
+    events.push({ start: start, end: end, title: title });
+    save();
+    render();
+    closeModal();
+    scrollToDate(start);
+  });
+
+  // Bring a freshly added event to the centre of the screen
+  function scrollToDate(start) {
+    var idx = events.findIndex(function (ev) { return ev.start === start; });
+    if (idx < 0 || !nodes[idx]) return;
+    var rect = nodes[idx].getBoundingClientRect();
+    var target = window.scrollY + rect.top + rect.height / 2 - window.innerHeight / 2;
+    window.scrollTo({ top: target, behavior: "smooth" });
+  }
+
+  // ---- Boot -------------------------------------------------------------
+  render();
+  // Start near the first upcoming event so the page opens looking alive
+  (function initialScroll() {
+    if (!nodes.length) return;
+    var now = new Date(); now.setHours(0, 0, 0, 0);
+    var idx = events.findIndex(function (ev) { return parseDate(ev.end || ev.start) >= now; });
+    if (idx < 0) idx = events.length - 1;
+    var rect = nodes[idx].getBoundingClientRect();
+    var target = window.scrollY + rect.top + rect.height / 2 - window.innerHeight / 2;
+    window.scrollTo({ top: target, behavior: "auto" });
+    requestUpdate();
+  })();
+})();
+</script>
+</body>
+</html>
