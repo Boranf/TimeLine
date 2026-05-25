@@ -50,18 +50,6 @@
     pointer-events: none;
   }
 
-  /* Subtle focus band marking the magnification center */
-  .focus-band {
-    position: fixed;
-    left: 0;
-    right: 0;
-    top: 50%;
-    height: 1px;
-    transform: translateY(-50%);
-    z-index: 0;
-    pointer-events: none;
-  }
-
   .events {
     position: relative;
     z-index: 1;
@@ -81,7 +69,7 @@
     scroll-snap-align: center;
     transform-origin: center center;
     will-change: transform, opacity;
-    cursor: default;
+    cursor: pointer;
     user-select: none;
   }
 
@@ -121,13 +109,37 @@
   .event .title {
     margin-top: 6px;
     font-size: 0.98rem;
-    font-weight: 400;
-    color: var(--muted);
+    font-weight: 500;
+    color: var(--ink);
     letter-spacing: 0.01em;
   }
 
+  .event .location {
+    margin-top: 4px;
+    font-size: 0.8rem;
+    font-weight: 400;
+    color: var(--muted);
+  }
+
+  .event .meta {
+    margin-top: 9px;
+    display: flex;
+    gap: 6px;
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+  .event .meta span {
+    font-size: 0.58rem;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--muted);
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    padding: 2px 9px;
+  }
+
   /* The active (centred) event gets a darker title + accent dot */
-  .event.is-active .title { color: var(--ink); }
   .event.is-active .dot { background: #0071e3; }
 
   .empty {
@@ -179,12 +191,15 @@
     align-items: center;
     justify-content: center;
     z-index: 20;
+    padding: 20px;
   }
   .overlay.open { display: flex; }
 
   .modal {
     background: #fff;
-    width: min(92vw, 380px);
+    width: min(92vw, 400px);
+    max-height: 90vh;
+    overflow-y: auto;
     border-radius: 20px;
     padding: 26px 24px 22px;
     box-shadow: 0 20px 60px rgba(0, 0, 0, 0.28);
@@ -204,7 +219,9 @@
     color: var(--muted);
     margin-bottom: 6px;
   }
-  .field input {
+  .field label .opt { text-transform: none; font-weight: 400; }
+  .field input,
+  .field select {
     width: 100%;
     padding: 10px 12px;
     border: 1px solid var(--line);
@@ -215,8 +232,17 @@
     background: #fbfbfd;
     outline: none;
     transition: border-color 0.15s ease;
+    -webkit-appearance: none;
+    appearance: none;
   }
-  .field input:focus { border-color: #0071e3; }
+  .field select {
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'><path d='M1 1l5 5 5-5' fill='none' stroke='%2386868b' stroke-width='1.6' stroke-linecap='round'/></svg>");
+    background-repeat: no-repeat;
+    background-position: right 12px center;
+    padding-right: 32px;
+  }
+  .field input:focus,
+  .field select:focus { border-color: #0071e3; }
   .row { display: flex; gap: 12px; }
   .row .field { flex: 1; }
 
@@ -237,13 +263,13 @@
     transition: opacity 0.15s ease;
   }
   .actions button:hover { opacity: 0.85; }
+  .btn-delete { background: #ffe5e5; color: #d70015; flex: 0 0 auto; padding-left: 16px; padding-right: 16px; }
   .btn-cancel { background: #e8e8ed; color: var(--ink); }
   .btn-save { background: var(--ink); color: #fff; }
 </style>
 </head>
 <body>
   <div class="rail"></div>
-  <div class="focus-band"></div>
 
   <button class="add-btn" id="addBtn" title="Add event" aria-label="Add event">+</button>
 
@@ -252,24 +278,60 @@
 
   <div class="overlay" id="overlay">
     <form class="modal" id="form">
-      <h2>Add event</h2>
+      <h2 id="modalTitle">Add event</h2>
+
       <div class="field">
         <label for="title">Event</label>
         <input id="title" type="text" placeholder="e.g. SCCA Laguna Seca" required />
       </div>
+
+      <div class="field">
+        <label for="location">Location <span class="opt">(optional)</span></label>
+        <input id="location" type="text" placeholder="e.g. Monterey, California" />
+      </div>
+
       <div class="row">
         <div class="field">
           <label for="start">Start date</label>
           <input id="start" type="date" required />
         </div>
         <div class="field">
-          <label for="end">End date <span style="text-transform:none;font-weight:400;">(optional)</span></label>
+          <label for="end">End date <span class="opt">(optional)</span></label>
           <input id="end" type="date" />
         </div>
       </div>
+
+      <div class="row">
+        <div class="field">
+          <label for="repeat">Repeat</label>
+          <select id="repeat">
+            <option value="none">Does not repeat</option>
+            <option value="weekly">Every week</option>
+            <option value="monthly">Every month</option>
+            <option value="yearly">Every year</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="remind">Remind</label>
+          <select id="remind">
+            <option value="none">None</option>
+            <option value="at">At start time</option>
+            <option value="1h">1 hour before</option>
+            <option value="1d">1 day before</option>
+            <option value="1w">1 week before</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="field">
+        <label for="notes">Notes <span class="opt">(optional)</span></label>
+        <input id="notes" type="text" placeholder="Anything to remember" />
+      </div>
+
       <div class="actions">
+        <button type="button" class="btn-delete" id="deleteBtn" hidden>Delete</button>
         <button type="button" class="btn-cancel" id="cancelBtn">Cancel</button>
-        <button type="submit" class="btn-save">Add</button>
+        <button type="submit" class="btn-save" id="saveBtn">Add</button>
       </div>
     </form>
   </div>
@@ -279,21 +341,54 @@
   "use strict";
 
   var STORE_KEY = "timeline.events.v1";
+  var FIRED_KEY = "timeline.firedReminders.v1";
   var MONTHS = ["JAN","FEB","MAR","APR","MAY","JUN","JUL","AUG","SEP","OCT","NOV","DEC"];
 
+  var REPEAT_CHIP = { weekly: "Weekly", monthly: "Monthly", yearly: "Yearly" };
+  var REMIND_CHIP = { at: "Remind at start", "1h": "Remind 1h", "1d": "Remind 1d", "1w": "Remind 1w" };
+  var REMIND_MS = { at: 0, "1h": 3600e3, "1d": 86400e3, "1w": 604800e3 };
+
   var SEED = [
-    { start: "2026-05-28", end: "2026-05-30", title: "Thunderhill — California" },
-    { start: "2026-06-12", end: "2026-06-14", title: "Flight Sim Expo" },
-    { start: "2026-06-26", end: "",           title: "SCCA Laguna Seca" }
+    { title: "Thunderhill",       location: "Willows, California",  start: "2026-05-28", end: "2026-05-30" },
+    { title: "Flight Sim Expo",   location: "Las Vegas, Nevada",    start: "2026-06-12", end: "2026-06-14" },
+    { title: "SCCA Laguna Seca",  location: "Monterey, California", start: "2026-06-26", end: ""           }
   ];
 
-  var eventsEl = document.getElementById("events");
-  var emptyEl = document.getElementById("empty");
-  var overlay = document.getElementById("overlay");
-  var form = document.getElementById("form");
+  // DOM refs
+  var eventsEl   = document.getElementById("events");
+  var emptyEl    = document.getElementById("empty");
+  var overlay    = document.getElementById("overlay");
+  var form       = document.getElementById("form");
+  var modalTitle = document.getElementById("modalTitle");
+  var saveBtn    = document.getElementById("saveBtn");
+  var deleteBtn  = document.getElementById("deleteBtn");
+  var fTitle     = document.getElementById("title");
+  var fLocation  = document.getElementById("location");
+  var fStart     = document.getElementById("start");
+  var fEnd       = document.getElementById("end");
+  var fRepeat    = document.getElementById("repeat");
+  var fRemind    = document.getElementById("remind");
+  var fNotes     = document.getElementById("notes");
 
-  var events = load();
-  var nodes = []; // cached {el, label} for the magnification loop
+  var events = normalizeAll(load());
+  var nodes = [];        // DOM elements, parallel to sorted events
+  var editingId = null;
+
+  function uid() { return "e" + Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
+
+  function normalize(ev) {
+    return {
+      id: ev.id || uid(),
+      title: ev.title || "",
+      location: ev.location || "",
+      start: ev.start,
+      end: ev.end || "",
+      repeat: ev.repeat || "none",
+      remind: ev.remind || "none",
+      notes: ev.notes || ""
+    };
+  }
+  function normalizeAll(list) { return (list || []).map(normalize); }
 
   function load() {
     try {
@@ -302,9 +397,13 @@
     } catch (e) {}
     return SEED.slice();
   }
-
   function save() {
     try { localStorage.setItem(STORE_KEY, JSON.stringify(events)); } catch (e) {}
+  }
+
+  function findById(id) {
+    for (var i = 0; i < events.length; i++) if (events[i].id === id) return events[i];
+    return null;
   }
 
   function parseDate(s) { return new Date(s + "T00:00:00"); }
@@ -332,6 +431,8 @@
     events.forEach(function (ev) {
       var el = document.createElement("div");
       el.className = "event";
+      el.dataset.id = ev.id;
+      el.addEventListener("click", function () { openEdit(ev.id); });
 
       var dot = document.createElement("div");
       dot.className = "dot";
@@ -357,6 +458,27 @@
       title.textContent = ev.title;
       card.appendChild(title);
 
+      if (ev.location) {
+        var loc = document.createElement("div");
+        loc.className = "location";
+        loc.textContent = ev.location;
+        card.appendChild(loc);
+      }
+
+      var chips = [];
+      if (ev.repeat && REPEAT_CHIP[ev.repeat]) chips.push(REPEAT_CHIP[ev.repeat]);
+      if (ev.remind && REMIND_CHIP[ev.remind]) chips.push(REMIND_CHIP[ev.remind]);
+      if (chips.length) {
+        var meta = document.createElement("div");
+        meta.className = "meta";
+        chips.forEach(function (c) {
+          var span = document.createElement("span");
+          span.textContent = c;
+          meta.appendChild(span);
+        });
+        card.appendChild(meta);
+      }
+
       el.appendChild(dot);
       el.appendChild(card);
       eventsEl.appendChild(el);
@@ -381,8 +503,9 @@
     ticking = false;
     var center = window.innerHeight / 2;
     var R = window.innerHeight * 0.55; // influence radius
-    var maxScale = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--maxScale")) || 1.9;
-    var minScale = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--minScale")) || 0.62;
+    var styles = getComputedStyle(document.documentElement);
+    var maxScale = parseFloat(styles.getPropertyValue("--maxScale")) || 1.9;
+    var minScale = parseFloat(styles.getPropertyValue("--minScale")) || 0.62;
 
     var closest = null;
     var closestDist = Infinity;
@@ -415,47 +538,155 @@
   window.addEventListener("scroll", requestUpdate, { passive: true });
   window.addEventListener("resize", requestUpdate);
 
-  // ---- Add-event modal --------------------------------------------------
-  function openModal() {
-    overlay.classList.add("open");
-    document.getElementById("title").focus();
+  // ---- Add / edit modal -------------------------------------------------
+  function fillForm(ev) {
+    fTitle.value    = ev ? ev.title : "";
+    fLocation.value = ev ? ev.location : "";
+    fStart.value    = ev ? ev.start : "";
+    fEnd.value      = ev ? ev.end : "";
+    fRepeat.value   = ev ? ev.repeat : "none";
+    fRemind.value   = ev ? ev.remind : "none";
+    fNotes.value    = ev ? ev.notes : "";
   }
+
+  function openAdd() {
+    editingId = null;
+    modalTitle.textContent = "Add event";
+    saveBtn.textContent = "Add";
+    deleteBtn.hidden = true;
+    fillForm(null);
+    overlay.classList.add("open");
+    fTitle.focus();
+  }
+
+  function openEdit(id) {
+    var ev = findById(id);
+    if (!ev) return;
+    editingId = id;
+    modalTitle.textContent = "Edit event";
+    saveBtn.textContent = "Save";
+    deleteBtn.hidden = false;
+    fillForm(ev);
+    overlay.classList.add("open");
+    fTitle.focus();
+  }
+
   function closeModal() {
     overlay.classList.remove("open");
+    editingId = null;
     form.reset();
   }
 
-  document.getElementById("addBtn").addEventListener("click", openModal);
+  document.getElementById("addBtn").addEventListener("click", openAdd);
   document.getElementById("cancelBtn").addEventListener("click", closeModal);
   overlay.addEventListener("click", function (e) { if (e.target === overlay) closeModal(); });
   document.addEventListener("keydown", function (e) { if (e.key === "Escape") closeModal(); });
 
-  form.addEventListener("submit", function (e) {
-    e.preventDefault();
-    var title = document.getElementById("title").value.trim();
-    var start = document.getElementById("start").value;
-    var end = document.getElementById("end").value;
-    if (!title || !start) return;
-    if (end && parseDate(end) < parseDate(start)) end = start;
-
-    events.push({ start: start, end: end, title: title });
+  deleteBtn.addEventListener("click", function () {
+    if (!editingId) return;
+    events = events.filter(function (ev) { return ev.id !== editingId; });
     save();
     render();
     closeModal();
-    scrollToDate(start);
   });
 
-  // Bring a freshly added event to the centre of the screen
-  function scrollToDate(start) {
-    var idx = events.findIndex(function (ev) { return ev.start === start; });
-    if (idx < 0 || !nodes[idx]) return;
-    var rect = nodes[idx].getBoundingClientRect();
+  form.addEventListener("submit", function (e) {
+    e.preventDefault();
+    var title = fTitle.value.trim();
+    var start = fStart.value;
+    if (!title || !start) return;
+
+    var end = fEnd.value;
+    if (end && parseDate(end) < parseDate(start)) end = start;
+
+    var fields = {
+      title: title,
+      location: fLocation.value.trim(),
+      start: start,
+      end: end,
+      repeat: fRepeat.value,
+      remind: fRemind.value,
+      notes: fNotes.value.trim()
+    };
+
+    var savedId;
+    if (editingId) {
+      var ev = findById(editingId);
+      if (ev) {
+        ev.title = fields.title; ev.location = fields.location;
+        ev.start = fields.start; ev.end = fields.end;
+        ev.repeat = fields.repeat; ev.remind = fields.remind;
+        ev.notes = fields.notes;
+      }
+      savedId = editingId;
+    } else {
+      var fresh = normalize(fields);
+      events.push(fresh);
+      savedId = fresh.id;
+    }
+
+    save();
+    maybeRequestNotify(fields.remind);
+    render();
+    closeModal();
+    scrollToId(savedId);
+    checkReminders();
+  });
+
+  // Bring an event to the centre of the screen
+  function scrollToId(id) {
+    var el = nodes.filter(function (n) { return n.dataset.id === id; })[0];
+    if (!el) return;
+    var rect = el.getBoundingClientRect();
     var target = window.scrollY + rect.top + rect.height / 2 - window.innerHeight / 2;
     window.scrollTo({ top: target, behavior: "smooth" });
   }
 
+  // ---- Reminders (best-effort while the page is open) -------------------
+  function loadFired() {
+    try { return JSON.parse(localStorage.getItem(FIRED_KEY)) || {}; } catch (e) { return {}; }
+  }
+  function saveFired(obj) {
+    try { localStorage.setItem(FIRED_KEY, JSON.stringify(obj)); } catch (e) {}
+  }
+  function maybeRequestNotify(remind) {
+    if (remind && remind !== "none" && "Notification" in window && Notification.permission === "default") {
+      Notification.requestPermission();
+    }
+  }
+  function checkReminders() {
+    if (!("Notification" in window) || Notification.permission !== "granted") return;
+    var now = Date.now();
+    var fired = loadFired();
+    var changed = false;
+
+    events.forEach(function (ev) {
+      if (!ev.remind || ev.remind === "none") return;
+      var off = REMIND_MS[ev.remind];
+      if (off == null) return;
+      var startMs = parseDate(ev.start).getTime();
+      var when = startMs - off;
+      var key = ev.id + ":" + ev.remind + ":" + ev.start;
+      // Fire once, in the window between the reminder moment and a day past the start
+      if (now >= when && now <= startMs + 86400e3 && !fired[key]) {
+        try {
+          new Notification(ev.title || "Event", {
+            body: formatDate(ev.start, ev.end) + (ev.location ? " · " + ev.location : "")
+          });
+        } catch (e) {}
+        fired[key] = true;
+        changed = true;
+      }
+    });
+
+    if (changed) saveFired(fired);
+  }
+  setInterval(checkReminders, 30000);
+
   // ---- Boot -------------------------------------------------------------
   render();
+  checkReminders();
+
   // Start near the first upcoming event so the page opens looking alive
   (function initialScroll() {
     if (!nodes.length) return;
