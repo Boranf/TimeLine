@@ -164,7 +164,14 @@
     font-size: 0.8rem;
     font-weight: 400;
     color: var(--muted);
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    text-decoration: none;
+    cursor: pointer;
   }
+  .event .location svg { flex: none; opacity: 0.9; }
+  .event.is-active .location { color: var(--today); }
 
   .event .meta {
     margin-top: 9px;
@@ -588,6 +595,13 @@
   }
   function isPast(ev) { return parseDate(ev.end || ev.start).getTime() < todayMs(); }
 
+  // Google Maps search link. Combine title + location so a venue like
+  // "SCCA Laguna Seca" + "Monterey, California" resolves to the track.
+  function mapsUrl(ev) {
+    var q = [ev.title, ev.location].filter(Boolean).join(" ");
+    return "https://www.google.com/maps/search/?api=1&query=" + encodeURIComponent(q);
+  }
+
   function pad2(n) { return (n < 10 ? "0" : "") + n; }
   // Live ticking countdown for the centred event
   function countdownText(ev) {
@@ -721,9 +735,14 @@
     card.appendChild(title);
 
     if (ev.location) {
-      var loc = document.createElement("div");
+      var loc = document.createElement("a");
       loc.className = "location";
-      loc.textContent = ev.location;
+      loc.href = mapsUrl(ev);
+      loc.target = "_blank";
+      loc.rel = "noopener noreferrer";
+      loc.innerHTML = '<svg viewBox="0 0 24 24" width="11" height="11" fill="currentColor" aria-hidden="true"><path d="M12 2C8.1 2 5 5.1 5 9c0 5.2 7 13 7 13s7-7.8 7-13c0-3.9-3.1-7-7-7zm0 9.5A2.5 2.5 0 1 1 12 6a2.5 2.5 0 0 1 0 5.5z"/></svg>';
+      loc.appendChild(document.createTextNode(ev.location));
+      loc.addEventListener("click", function (e) { e.stopPropagation(); });
       card.appendChild(loc);
     }
 
