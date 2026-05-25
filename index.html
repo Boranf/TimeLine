@@ -2,8 +2,18 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover, user-scalable=no" />
 <title>Timeline</title>
+<meta name="color-scheme" content="light dark" />
+<meta name="theme-color" media="(prefers-color-scheme: light)" content="#f5f5f7" />
+<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#000000" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="Timeline" />
+<link rel="apple-touch-icon" href="apple-touch-icon.png" />
+<link rel="icon" href="icon.svg" type="image/svg+xml" />
+<link rel="manifest" href="manifest.webmanifest" />
 <style>
   :root {
     --bg: #f5f5f7;
@@ -12,8 +22,30 @@
     --line: #d2d2d7;
     --accent: #1d1d1f;
     --today: #0071e3;
+    --surface: #ffffff;
+    --input: #fbfbfd;
+    --chip: #e8e8ed;
+    --pill: rgba(255, 255, 255, 0.72);
+    --del-bg: #ffe5e5;
+    --del-fg: #d70015;
     --maxScale: 1.9;
     --minScale: 0.62;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #000000;
+      --ink: #f5f5f7;
+      --muted: #8e8e93;
+      --line: #3a3a3c;
+      --accent: #f5f5f7;
+      --today: #0a84ff;
+      --surface: #1c1c1e;
+      --input: #2c2c2e;
+      --chip: #2c2c2e;
+      --pill: rgba(44, 44, 46, 0.72);
+      --del-bg: rgba(255, 69, 58, 0.18);
+      --del-fg: #ff453b;
+    }
   }
 
   * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -30,6 +62,7 @@
     overflow-y: scroll;
     scroll-snap-type: y proximity;
     overscroll-behavior: none;
+    color-scheme: light dark;
   }
 
   /* The single vertical line, fixed in the middle of the screen */
@@ -100,6 +133,7 @@
     text-transform: uppercase;
     color: var(--today);
     margin-bottom: 4px;
+    font-variant-numeric: tabular-nums;
   }
 
   .event .date {
@@ -217,7 +251,6 @@
     font-weight: 600;
     padding: 6px 11px;
     border-radius: 999px;
-    background: rgba(255, 255, 255, 0.72);
     backdrop-filter: blur(8px);
     -webkit-backdrop-filter: blur(8px);
     border: 1px solid var(--line);
@@ -225,6 +258,7 @@
     cursor: pointer;
     user-select: none;
     transition: opacity 0.15s ease;
+    background: var(--pill);
   }
   .filters .pill .swatch { width: 9px; height: 9px; border-radius: 50%; }
   .filters .pill.off { opacity: 0.34; }
@@ -239,7 +273,7 @@
     border-radius: 50%;
     border: none;
     background: var(--ink);
-    color: #fff;
+    color: var(--bg);
     font-size: 26px;
     line-height: 1;
     font-weight: 300;
@@ -271,7 +305,7 @@
   .overlay.open { display: flex; }
 
   .modal {
-    background: #fff;
+    background: var(--surface);
     width: min(92vw, 400px);
     max-height: 90vh;
     overflow-y: auto;
@@ -304,7 +338,7 @@
     font-size: 0.95rem;
     font-family: inherit;
     color: var(--ink);
-    background: #fbfbfd;
+    background: var(--input);
     outline: none;
     transition: border-color 0.15s ease;
     -webkit-appearance: none;
@@ -338,9 +372,9 @@
     transition: opacity 0.15s ease;
   }
   .actions button:hover { opacity: 0.85; }
-  .btn-delete { background: #ffe5e5; color: #d70015; flex: 0 0 auto; padding-left: 16px; padding-right: 16px; }
-  .btn-cancel { background: #e8e8ed; color: var(--ink); }
-  .btn-save { background: var(--ink); color: #fff; }
+  .btn-delete { background: var(--del-bg); color: var(--del-fg); flex: 0 0 auto; padding-left: 16px; padding-right: 16px; }
+  .btn-cancel { background: var(--chip); color: var(--ink); }
+  .btn-save { background: var(--ink); color: var(--bg); }
 </style>
 </head>
 <body>
@@ -554,6 +588,31 @@
   }
   function isPast(ev) { return parseDate(ev.end || ev.start).getTime() < todayMs(); }
 
+  function pad2(n) { return (n < 10 ? "0" : "") + n; }
+  // Live ticking countdown for the centred event
+  function countdownText(ev) {
+    var now = Date.now();
+    var start = parseDate(ev.start).getTime();
+    var endDay = parseDate(ev.end || ev.start).getTime() + 86400e3 - 1000;
+    if (now < start) {
+      var s = Math.floor((start - now) / 1000);
+      var d = Math.floor(s / 86400); s %= 86400;
+      var h = Math.floor(s / 3600); s %= 3600;
+      var m = Math.floor(s / 60); s %= 60;
+      return (d > 0 ? d + "d " : "") + pad2(h) + ":" + pad2(m) + ":" + pad2(s);
+    }
+    if (now <= endDay) return "Happening now";
+    return relativeText(ev);
+  }
+  function updateActiveCountdown() {
+    var el = eventsEl.querySelector(".event.is-active");
+    if (!el) return;
+    var ev = findById(el.dataset.id);
+    var cd = el.querySelector(".countdown");
+    if (ev && cd) cd.textContent = countdownText(ev);
+  }
+  setInterval(updateActiveCountdown, 1000);
+
   // ---- Filter bar -------------------------------------------------------
   function renderFilters() {
     filtersEl.innerHTML = "";
@@ -734,6 +793,7 @@
     for (var j = 0; j < nodes.length; j++) {
       nodes[j].classList.toggle("is-active", nodes[j] === closest);
     }
+    updateActiveCountdown();
   }
 
   window.addEventListener("scroll", requestUpdate, { passive: true });
@@ -855,6 +915,16 @@
       Notification.requestPermission();
     }
   }
+  function showNote(title, body) {
+    var opts = { body: body, icon: "icon-192.png", badge: "icon-192.png", tag: "timeline" };
+    try {
+      if (navigator.serviceWorker && navigator.serviceWorker.controller) {
+        navigator.serviceWorker.ready.then(function (reg) { reg.showNotification(title, opts); });
+        return;
+      }
+    } catch (e) {}
+    try { new Notification(title, opts); } catch (e) {}
+  }
   function checkReminders() {
     if (!("Notification" in window) || Notification.permission !== "granted") return;
     var now = Date.now();
@@ -869,11 +939,7 @@
       var when = startMs - off;
       var key = ev.id + ":" + ev.remind + ":" + ev.start;
       if (now >= when && now <= startMs + 86400e3 && !fired[key]) {
-        try {
-          new Notification(ev.title || "Event", {
-            body: formatDate(ev.start, ev.end) + (ev.location ? " · " + ev.location : "")
-          });
-        } catch (e) {}
+        showNote(ev.title || "Event", formatDate(ev.start, ev.end) + (ev.location ? " · " + ev.location : ""));
         fired[key] = true;
         changed = true;
       }
@@ -884,6 +950,12 @@
   setInterval(checkReminders, 30000);
 
   // ---- Boot -------------------------------------------------------------
+  if ("serviceWorker" in navigator) {
+    window.addEventListener("load", function () {
+      navigator.serviceWorker.register("sw.js").catch(function () {});
+    });
+  }
+
   renderFilters();
   render();
   checkReminders();
