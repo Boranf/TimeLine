@@ -11,6 +11,7 @@
     --muted: #86868b;
     --line: #d2d2d7;
     --accent: #1d1d1f;
+    --today: #0071e3;
     --maxScale: 1.9;
     --minScale: 0.62;
   }
@@ -77,10 +78,10 @@
     width: 13px;
     height: 13px;
     border-radius: 50%;
-    background: var(--accent);
+    background: var(--cat, var(--accent));
     /* ring in page colour visually breaks the rail so dots read as beads */
     box-shadow: 0 0 0 7px var(--bg);
-    transition: background 0.2s ease;
+    transition: box-shadow 0.2s ease;
   }
 
   .event .card {
@@ -89,6 +90,16 @@
     border-radius: 16px;
     text-align: center;
     white-space: nowrap;
+  }
+
+  .event .countdown {
+    display: none;
+    font-size: 0.64rem;
+    font-weight: 700;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--today);
+    margin-bottom: 4px;
   }
 
   .event .date {
@@ -139,8 +150,40 @@
     padding: 2px 9px;
   }
 
-  /* The active (centred) event gets a darker title + accent dot */
-  .event.is-active .dot { background: #0071e3; }
+  /* Centred event: show countdown, ring the dot in its category colour */
+  .event.is-active .countdown { display: block; }
+  .event.is-active .dot { box-shadow: 0 0 0 7px var(--bg), 0 0 0 9px var(--cat, var(--accent)); }
+
+  /* Past events are de-emphasised */
+  .event.is-past .date,
+  .event.is-past .title { color: var(--muted); }
+  .event.is-past .countdown { color: var(--muted); }
+
+  /* TODAY marker on the rail (does not magnify) */
+  .today-marker {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    user-select: none;
+    scroll-snap-align: center;
+  }
+  .today-marker .tdot {
+    width: 11px;
+    height: 11px;
+    border-radius: 50%;
+    background: var(--today);
+    box-shadow: 0 0 0 7px var(--bg), 0 0 0 9px rgba(0, 113, 227, 0.22);
+  }
+  .today-marker .tlabel {
+    font-size: 0.6rem;
+    font-weight: 700;
+    letter-spacing: 0.18em;
+    color: var(--today);
+    background: var(--bg);
+    padding: 3px 12px;
+    border-radius: 999px;
+  }
 
   .empty {
     position: fixed;
@@ -154,6 +197,37 @@
     pointer-events: none;
   }
   .empty[hidden] { display: none; }
+
+  /* Category filter bar, top-left */
+  .filters {
+    position: fixed;
+    top: 24px;
+    left: 20px;
+    z-index: 10;
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    max-width: 58vw;
+  }
+  .filters .pill {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.72rem;
+    font-weight: 600;
+    padding: 6px 11px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.72);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    border: 1px solid var(--line);
+    color: var(--ink);
+    cursor: pointer;
+    user-select: none;
+    transition: opacity 0.15s ease;
+  }
+  .filters .pill .swatch { width: 9px; height: 9px; border-radius: 50%; }
+  .filters .pill.off { opacity: 0.34; }
 
   /* Add button, top-right */
   .add-btn {
@@ -272,6 +346,7 @@
 <body>
   <div class="rail"></div>
 
+  <div class="filters" id="filters"></div>
   <button class="add-btn" id="addBtn" title="Add event" aria-label="Add event">+</button>
 
   <div class="events" id="events"></div>
@@ -289,6 +364,11 @@
       <div class="field">
         <label for="location">Location <span class="opt">(optional)</span></label>
         <input id="location" type="text" placeholder="e.g. Monterey, California" />
+      </div>
+
+      <div class="field">
+        <label for="category">Category</label>
+        <select id="category"></select>
       </div>
 
       <div class="row">
@@ -343,21 +423,32 @@
 
   var STORE_KEY = "timeline.events.v1";
   var FIRED_KEY = "timeline.firedReminders.v1";
+  var HIDDEN_KEY = "timeline.hiddenCats.v1";
   var MONTHS = ["JAN","FEB","MAR","APR","MAY","JUN","JUL","AUG","SEP","OCT","NOV","DEC"];
+
+  var CATS = {
+    general:  { name: "General",  color: "#8e8e93" },
+    racing:   { name: "Racing",   color: "#ff3b30" },
+    expo:     { name: "Expo",     color: "#0071e3" },
+    personal: { name: "Personal", color: "#34c759" },
+    travel:   { name: "Travel",   color: "#ff9500" }
+  };
+  function cat(key) { return CATS[key] || CATS.general; }
 
   var REPEAT_CHIP = { weekly: "Weekly", monthly: "Monthly", yearly: "Yearly" };
   var REMIND_CHIP = { at: "Remind at start", "1h": "Remind 1h", "1d": "Remind 1d", "1w": "Remind 1w" };
   var REMIND_MS = { at: 0, "1h": 3600e3, "1d": 86400e3, "1w": 604800e3 };
 
   var SEED = [
-    { title: "Thunderhill",       location: "Willows, California",  start: "2026-05-28", end: "2026-05-30" },
-    { title: "Flight Sim Expo",   location: "Las Vegas, Nevada",    start: "2026-06-12", end: "2026-06-14" },
-    { title: "SCCA Laguna Seca",  location: "Monterey, California", start: "2026-06-26", end: ""           }
+    { title: "Thunderhill",      location: "Willows, California",  category: "racing", start: "2026-05-28", end: "2026-05-30" },
+    { title: "Flight Sim Expo",  location: "Las Vegas, Nevada",    category: "expo",   start: "2026-06-12", end: "2026-06-14" },
+    { title: "SCCA Laguna Seca", location: "Monterey, California", category: "racing", start: "2026-06-26", end: ""           }
   ];
 
   // DOM refs
   var eventsEl   = document.getElementById("events");
   var emptyEl    = document.getElementById("empty");
+  var filtersEl  = document.getElementById("filters");
   var overlay    = document.getElementById("overlay");
   var form       = document.getElementById("form");
   var modalTitle = document.getElementById("modalTitle");
@@ -365,6 +456,7 @@
   var deleteBtn  = document.getElementById("deleteBtn");
   var fTitle     = document.getElementById("title");
   var fLocation  = document.getElementById("location");
+  var fCategory  = document.getElementById("category");
   var fStart     = document.getElementById("start");
   var fEnd       = document.getElementById("end");
   var fRepeat    = document.getElementById("repeat");
@@ -372,8 +464,19 @@
   var fNotes     = document.getElementById("notes");
 
   var events = normalizeAll(load());
-  var nodes = [];        // DOM elements, parallel to sorted events
+  var hiddenCats = loadHidden();      // { catKey: true } => hidden
+  var nodes = [];                     // .event elements, parallel to `visible`
+  var visible = [];                   // events currently shown (after filter), sorted
+  var firstUpcomingIdx = 0;           // index in `visible` of first ongoing/upcoming event
   var editingId = null;
+
+  // populate the category <select>
+  Object.keys(CATS).forEach(function (key) {
+    var o = document.createElement("option");
+    o.value = key;
+    o.textContent = CATS[key].name;
+    fCategory.appendChild(o);
+  });
 
   function uid() { return "e" + Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
 
@@ -382,6 +485,7 @@
       id: ev.id || uid(),
       title: ev.title || "",
       location: ev.location || "",
+      category: CATS[ev.category] ? ev.category : "general",
       start: ev.start,
       end: ev.end || "",
       repeat: ev.repeat || "none",
@@ -401,6 +505,12 @@
   function save() {
     try { localStorage.setItem(STORE_KEY, JSON.stringify(events)); } catch (e) {}
   }
+  function loadHidden() {
+    try { return JSON.parse(localStorage.getItem(HIDDEN_KEY)) || {}; } catch (e) { return {}; }
+  }
+  function saveHidden() {
+    try { localStorage.setItem(HIDDEN_KEY, JSON.stringify(hiddenCats)); } catch (e) {}
+  }
 
   function findById(id) {
     for (var i = 0; i < events.length; i++) if (events[i].id === id) return events[i];
@@ -408,6 +518,7 @@
   }
 
   function parseDate(s) { return new Date(s + "T00:00:00"); }
+  function todayMs() { var d = new Date(); d.setHours(0, 0, 0, 0); return d.getTime(); }
 
   function formatDate(start, end) {
     var s = parseDate(start);
@@ -421,74 +532,162 @@
     return MONTHS[s.getMonth()] + " " + s.getDate() + " – " + MONTHS[e.getMonth()] + " " + e.getDate();
   }
 
+  function humanSpan(d) {
+    if (d <= 1) return "1 day";
+    if (d < 14) return d + " days";
+    if (d < 60) return Math.round(d / 7) + " weeks";
+    return Math.round(d / 30) + " months";
+  }
+  function relativeText(ev) {
+    var today = todayMs();
+    var start = parseDate(ev.start).getTime();
+    var end = parseDate(ev.end || ev.start).getTime();
+    if (today < start) {
+      var dUp = Math.round((start - today) / 86400e3);
+      return dUp === 1 ? "Tomorrow" : "in " + humanSpan(dUp);
+    }
+    if (today > end) {
+      var dPast = Math.round((today - end) / 86400e3);
+      return dPast === 1 ? "Yesterday" : humanSpan(dPast) + " ago";
+    }
+    return (ev.end && ev.end !== ev.start) ? "Happening now" : "Today";
+  }
+  function isPast(ev) { return parseDate(ev.end || ev.start).getTime() < todayMs(); }
+
+  // ---- Filter bar -------------------------------------------------------
+  function renderFilters() {
+    filtersEl.innerHTML = "";
+    var used = {};
+    events.forEach(function (ev) { used[ev.category] = true; });
+    var keys = Object.keys(CATS).filter(function (k) { return used[k]; });
+    if (keys.length < 2) return; // nothing meaningful to filter
+
+    keys.forEach(function (key) {
+      var c = cat(key);
+      var pill = document.createElement("div");
+      pill.className = "pill" + (hiddenCats[key] ? " off" : "");
+      var sw = document.createElement("span");
+      sw.className = "swatch";
+      sw.style.background = c.color;
+      var label = document.createElement("span");
+      label.textContent = c.name;
+      pill.appendChild(sw);
+      pill.appendChild(label);
+      pill.addEventListener("click", function () {
+        if (hiddenCats[key]) delete hiddenCats[key]; else hiddenCats[key] = true;
+        saveHidden();
+        renderFilters();
+        render();
+      });
+      filtersEl.appendChild(pill);
+    });
+  }
+
+  // ---- Render timeline --------------------------------------------------
   function render() {
-    events.sort(function (a, b) { return parseDate(a.start) - parseDate(b.start); });
+    visible = events
+      .filter(function (ev) { return !hiddenCats[ev.category]; })
+      .sort(function (a, b) { return parseDate(a.start) - parseDate(b.start); });
 
     eventsEl.innerHTML = "";
     nodes = [];
 
     var currentYear = new Date().getFullYear();
-
-    events.forEach(function (ev) {
-      var el = document.createElement("div");
-      el.className = "event";
-      el.dataset.id = ev.id;
-      el.addEventListener("click", function () { openEdit(ev.id); });
-
-      var dot = document.createElement("div");
-      dot.className = "dot";
-
-      var card = document.createElement("div");
-      card.className = "card";
-
-      var date = document.createElement("div");
-      date.className = "date";
-      date.textContent = formatDate(ev.start, ev.end);
-      card.appendChild(date);
-
-      var yr = parseDate(ev.start).getFullYear();
-      if (yr !== currentYear) {
-        var year = document.createElement("div");
-        year.className = "year";
-        year.textContent = yr;
-        card.appendChild(year);
-      }
-
-      var title = document.createElement("div");
-      title.className = "title";
-      title.textContent = ev.title;
-      card.appendChild(title);
-
-      if (ev.location) {
-        var loc = document.createElement("div");
-        loc.className = "location";
-        loc.textContent = ev.location;
-        card.appendChild(loc);
-      }
-
-      var chips = [];
-      if (ev.repeat && REPEAT_CHIP[ev.repeat]) chips.push(REPEAT_CHIP[ev.repeat]);
-      if (ev.remind && REMIND_CHIP[ev.remind]) chips.push(REMIND_CHIP[ev.remind]);
-      if (chips.length) {
-        var meta = document.createElement("div");
-        meta.className = "meta";
-        chips.forEach(function (c) {
-          var span = document.createElement("span");
-          span.textContent = c;
-          meta.appendChild(span);
-        });
-        card.appendChild(meta);
-      }
-
-      el.appendChild(dot);
-      el.appendChild(card);
-      eventsEl.appendChild(el);
-
-      nodes.push(el);
+    var today = todayMs();
+    firstUpcomingIdx = visible.findIndex(function (ev) {
+      return parseDate(ev.end || ev.start).getTime() >= today;
     });
+    if (firstUpcomingIdx < 0) firstUpcomingIdx = visible.length;
+
+    var todayMarker = makeTodayMarker();
+
+    visible.forEach(function (ev, i) {
+      if (i === firstUpcomingIdx) eventsEl.appendChild(todayMarker);
+      eventsEl.appendChild(buildEvent(ev, currentYear));
+    });
+    if (firstUpcomingIdx >= visible.length) eventsEl.appendChild(todayMarker);
 
     emptyEl.hidden = events.length > 0;
     requestUpdate();
+  }
+
+  function makeTodayMarker() {
+    var m = document.createElement("div");
+    m.className = "today-marker";
+    var dot = document.createElement("div");
+    dot.className = "tdot";
+    var label = document.createElement("div");
+    label.className = "tlabel";
+    label.textContent = "TODAY · " + formatDate(new Date(todayMs()).toISOString().slice(0, 10), "");
+    m.appendChild(dot);
+    m.appendChild(label);
+    return m;
+  }
+
+  function buildEvent(ev, currentYear) {
+    var c = cat(ev.category);
+    var el = document.createElement("div");
+    el.className = "event" + (isPast(ev) ? " is-past" : "");
+    el.dataset.id = ev.id;
+    el.style.setProperty("--cat", c.color);
+    el.addEventListener("click", function () { openEdit(ev.id); });
+
+    var dot = document.createElement("div");
+    dot.className = "dot";
+
+    var card = document.createElement("div");
+    card.className = "card";
+
+    var countdown = document.createElement("div");
+    countdown.className = "countdown";
+    countdown.textContent = relativeText(ev);
+    card.appendChild(countdown);
+
+    var date = document.createElement("div");
+    date.className = "date";
+    date.textContent = formatDate(ev.start, ev.end);
+    card.appendChild(date);
+
+    var yr = parseDate(ev.start).getFullYear();
+    if (yr !== currentYear) {
+      var year = document.createElement("div");
+      year.className = "year";
+      year.textContent = yr;
+      card.appendChild(year);
+    }
+
+    var title = document.createElement("div");
+    title.className = "title";
+    title.textContent = ev.title;
+    card.appendChild(title);
+
+    if (ev.location) {
+      var loc = document.createElement("div");
+      loc.className = "location";
+      loc.textContent = ev.location;
+      card.appendChild(loc);
+    }
+
+    var chips = [];
+    if (ev.category && ev.category !== "general") chips.push({ text: c.name, color: c.color });
+    if (ev.repeat && REPEAT_CHIP[ev.repeat]) chips.push({ text: REPEAT_CHIP[ev.repeat] });
+    if (ev.remind && REMIND_CHIP[ev.remind]) chips.push({ text: REMIND_CHIP[ev.remind] });
+    if (chips.length) {
+      var meta = document.createElement("div");
+      meta.className = "meta";
+      chips.forEach(function (ch) {
+        var span = document.createElement("span");
+        span.textContent = ch.text;
+        if (ch.color) { span.style.color = ch.color; span.style.borderColor = ch.color; }
+        meta.appendChild(span);
+      });
+      card.appendChild(meta);
+    }
+
+    el.appendChild(dot);
+    el.appendChild(card);
+    nodes.push(el);
+    return el;
   }
 
   // ---- Dock magnification ----------------------------------------------
@@ -523,6 +722,7 @@
 
       var scale = minScale + (maxScale - minScale) * falloff;
       var opacity = 0.22 + 0.78 * falloff;
+      if (el.classList.contains("is-past")) opacity *= 0.5;
 
       el.style.transform = "scale(" + scale.toFixed(3) + ")";
       el.style.opacity = opacity.toFixed(3);
@@ -543,6 +743,7 @@
   function fillForm(ev) {
     fTitle.value    = ev ? ev.title : "";
     fLocation.value = ev ? ev.location : "";
+    fCategory.value = ev ? ev.category : "general";
     fStart.value    = ev ? ev.start : "";
     fEnd.value      = ev ? ev.end : "";
     fRepeat.value   = ev ? ev.repeat : "none";
@@ -587,6 +788,7 @@
     if (!editingId) return;
     events = events.filter(function (ev) { return ev.id !== editingId; });
     save();
+    renderFilters();
     render();
     closeModal();
   });
@@ -603,6 +805,7 @@
     var fields = {
       title: title,
       location: fLocation.value.trim(),
+      category: fCategory.value,
       start: start,
       end: end,
       repeat: fRepeat.value,
@@ -614,10 +817,9 @@
     if (editingId) {
       var ev = findById(editingId);
       if (ev) {
-        ev.title = fields.title; ev.location = fields.location;
+        ev.title = fields.title; ev.location = fields.location; ev.category = fields.category;
         ev.start = fields.start; ev.end = fields.end;
-        ev.repeat = fields.repeat; ev.remind = fields.remind;
-        ev.notes = fields.notes;
+        ev.repeat = fields.repeat; ev.remind = fields.remind; ev.notes = fields.notes;
       }
       savedId = editingId;
     } else {
@@ -628,6 +830,7 @@
 
     save();
     maybeRequestNotify(fields.remind);
+    renderFilters();
     render();
     closeModal();
     scrollToId(savedId);
@@ -637,10 +840,7 @@
   // Bring an event to the centre of the screen
   function scrollToId(id) {
     var el = nodes.filter(function (n) { return n.dataset.id === id; })[0];
-    if (!el) return;
-    var rect = el.getBoundingClientRect();
-    var target = window.scrollY + rect.top + rect.height / 2 - window.innerHeight / 2;
-    window.scrollTo({ top: target, behavior: "smooth" });
+    if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
   }
 
   // ---- Reminders (best-effort while the page is open) -------------------
@@ -668,7 +868,6 @@
       var startMs = parseDate(ev.start).getTime();
       var when = startMs - off;
       var key = ev.id + ":" + ev.remind + ":" + ev.start;
-      // Fire once, in the window between the reminder moment and a day past the start
       if (now >= when && now <= startMs + 86400e3 && !fired[key]) {
         try {
           new Notification(ev.title || "Event", {
@@ -685,19 +884,18 @@
   setInterval(checkReminders, 30000);
 
   // ---- Boot -------------------------------------------------------------
+  renderFilters();
   render();
   checkReminders();
 
-  // Start near the first upcoming event so the page opens looking alive
+  // Open centred on the first upcoming event
   (function initialScroll() {
     if (!nodes.length) return;
-    var now = new Date(); now.setHours(0, 0, 0, 0);
-    var idx = events.findIndex(function (ev) { return parseDate(ev.end || ev.start) >= now; });
-    if (idx < 0) idx = events.length - 1;
-    var rect = nodes[idx].getBoundingClientRect();
-    var target = window.scrollY + rect.top + rect.height / 2 - window.innerHeight / 2;
-    window.scrollTo({ top: target, behavior: "auto" });
-    requestUpdate();
+    var idx = Math.min(firstUpcomingIdx, nodes.length - 1);
+    requestAnimationFrame(function () {
+      nodes[idx].scrollIntoView({ block: "center", inline: "nearest" });
+      requestUpdate();
+    });
   })();
 })();
 </script>
