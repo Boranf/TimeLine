@@ -28,6 +28,7 @@
     --pill: rgba(255, 255, 255, 0.72);
     --del-bg: #ffe5e5;
     --del-fg: #d70015;
+    --wp-opacity: 0.08;
     --maxScale: 1.9;
     --minScale: 0.62;
   }
@@ -45,6 +46,7 @@
       --pill: rgba(44, 44, 46, 0.72);
       --del-bg: rgba(255, 69, 58, 0.18);
       --del-fg: #ff453b;
+      --wp-opacity: 0.1;
     }
   }
 
@@ -63,6 +65,18 @@
     scroll-snap-type: y proximity;
     overscroll-behavior: none;
     color-scheme: light dark;
+  }
+
+  /* Faint full-screen background wallpaper (set via JS if the image exists) */
+  .wallpaper {
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+    opacity: var(--wp-opacity, 0.08);
+    pointer-events: none;
   }
 
   /* The single vertical line, fixed in the middle of the screen */
@@ -389,6 +403,7 @@
 </style>
 </head>
 <body>
+  <div class="wallpaper" id="wallpaper"></div>
   <div class="rail"></div>
 
   <div class="filters" id="filters"></div>
@@ -993,6 +1008,21 @@
       });
     }
   }
+
+  // Optional faint background: drop wallpaper.jpg/.png/.webp next to
+  // index.html and it shows behind everything at --wp-opacity.
+  (function loadWallpaper() {
+    var el = document.getElementById("wallpaper");
+    if (!el) return;
+    var names = ["wallpaper.jpg", "wallpaper.png", "wallpaper.webp"];
+    (function tryNext(i) {
+      if (i >= names.length) return;
+      var img = new Image();
+      img.onload = function () { el.style.backgroundImage = "url('" + names[i] + "')"; };
+      img.onerror = function () { tryNext(i + 1); };
+      img.src = names[i];
+    })(0);
+  })();
 
   renderFilters();
   render();
