@@ -486,14 +486,36 @@
   var HIDDEN_KEY = "timeline.hiddenCats.v1";
   var MONTHS = ["JAN","FEB","MAR","APR","MAY","JUN","JUL","AUG","SEP","OCT","NOV","DEC"];
 
-  var CATS = {
+  var BUILTIN_CATS = {
     general:  { name: "General",  color: "#8e8e93" },
     racing:   { name: "Racing",   color: "#ff3b30" },
     expo:     { name: "Expo",     color: "#0071e3" },
     personal: { name: "Personal", color: "#34c759" },
     travel:   { name: "Travel",   color: "#ff9500" }
   };
-  function cat(key) { return CATS[key] || CATS.general; }
+  var CAT_PALETTE = ["#ff3b30","#ff9500","#ffcc00","#34c759","#30d158","#0071e3","#5856d6","#af52de","#ff2d55","#00c7be","#a2845e","#ff6482"];
+  var CUSTOM_KEY = "timeline.customCats.v1";
+  function loadCustomCats() { try { return JSON.parse(localStorage.getItem(CUSTOM_KEY)) || {}; } catch (e) { return {}; } }
+  function saveCustomCats() { try { localStorage.setItem(CUSTOM_KEY, JSON.stringify(customCats)); } catch (e) {} }
+  var customCats = loadCustomCats();
+  var CATS = Object.assign({}, BUILTIN_CATS, customCats);
+  function rebuildCats() { CATS = Object.assign({}, BUILTIN_CATS, customCats); }
+  function cat(key) { return CATS[key] || BUILTIN_CATS.general; }
+  function pickCatColor() {
+    var used = {};
+    Object.keys(CATS).forEach(function (k) { used[CATS[k].color.toLowerCase()] = true; });
+    for (var i = 0; i < CAT_PALETTE.length; i++) { if (!used[CAT_PALETTE[i].toLowerCase()]) return CAT_PALETTE[i]; }
+    return CAT_PALETTE[Object.keys(CATS).length % CAT_PALETTE.length];
+  }
+  function addCustomCategory(name) {
+    var base = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "cat";
+    var key = base, n = 2;
+    while (CATS[key]) { key = base + "-" + n; n++; }
+    customCats[key] = { name: name.trim(), color: pickCatColor() };
+    saveCustomCats();
+    rebuildCats();
+    return key;
+  }
 
   var REPEAT_CHIP = { weekly: "Weekly", monthly: "Monthly", yearly: "Yearly" };
   var REMIND_CHIP = { at: "Remind at start", "1h": "Remind 1h", "1d": "Remind 1d", "1w": "Remind 1w" };
@@ -530,12 +552,32 @@
   var firstUpcomingIdx = 0;           // index in `visible` of first ongoing/upcoming event
   var editingId = null;
 
-  // populate the category <select>
-  Object.keys(CATS).forEach(function (key) {
-    var o = document.createElement("option");
-    o.value = key;
-    o.textContent = CATS[key].name;
-    fCategory.appendChild(o);
+  // populate the category <select> (built-in + custom, plus a "new" action)
+  function populateCategorySelect() {
+    fCategory.innerHTML = "";
+    Object.keys(CATS).forEach(function (key) {
+      var o = document.createElement("option");
+      o.value = key;
+      o.textContent = CATS[key].name;
+      fCategory.appendChild(o);
+    });
+    var add = document.createElement("option");
+    add.value = "__new__";
+    add.textContent = "➕ New category…";
+    fCategory.appendChild(add);
+  }
+  populateCategorySelect();
+
+  var lastCategory = "general";
+  fCategory.addEventListener("change", function () {
+    if (fCategory.value !== "__new__") { lastCategory = fCategory.value; return; }
+    var name = (window.prompt("New category name") || "").trim();
+    if (!name) { fCategory.value = lastCategory; return; }
+    var key = addCustomCategory(name);
+    populateCategorySelect();
+    fCategory.value = key;
+    lastCategory = key;
+    renderFilters();
   });
 
   function uid() { return "e" + Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
@@ -847,6 +889,7 @@
     fTitle.value    = ev ? ev.title : "";
     fLocation.value = ev ? ev.location : "";
     fCategory.value = ev ? ev.category : "general";
+    lastCategory = fCategory.value;
     fStart.value    = ev ? ev.start : "";
     fEnd.value      = ev ? ev.end : "";
     fRepeat.value   = ev ? ev.repeat : "none";
@@ -908,7 +951,7 @@
     var fields = {
       title: title,
       location: fLocation.value.trim(),
-      category: fCategory.value,
+      category: fCategory.value === "__new__" ? lastCategory : fCategory.value,
       start: start,
       end: end,
       repeat: fRepeat.value,
