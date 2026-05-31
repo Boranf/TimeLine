@@ -1,5 +1,5 @@
 // Timeline service worker — app-shell caching for offline use.
-var CACHE = "timeline-v1";
+var CACHE = "timeline-v2";
 var ASSETS = [
   "./index.html",
   "./manifest.webmanifest",
@@ -7,7 +7,9 @@ var ASSETS = [
   "./icon-192.png",
   "./icon-512.png",
   "./icon-maskable-512.png",
-  "./apple-touch-icon.png"
+  "./apple-touch-icon.png",
+  "./tick.mp3",
+  "./wallpaper.jpg"
 ];
 
 self.addEventListener("install", function (e) {
