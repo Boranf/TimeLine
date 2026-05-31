@@ -362,6 +362,39 @@
     border: 1.5px dashed var(--today);
   }
 
+  /* Share popover sits under the share button on the right */
+  .share-menu {
+    left: auto;
+    right: 24px;
+    top: 70px;
+    min-width: 220px;
+  }
+  .share-menu .item .avatar {
+    background: var(--chip);
+    color: var(--ink);
+  }
+
+  /* Small toast for share/copy feedback */
+  .toast {
+    position: fixed;
+    bottom: 28px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--ink);
+    color: var(--bg);
+    padding: 10px 18px;
+    border-radius: 999px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    z-index: 30;
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.2s ease, visibility 0.2s;
+    pointer-events: none;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.18);
+  }
+  .toast.show { opacity: 0.95; visibility: visible; }
+
   /* Category filter bar, top-left (below the profile chip) */
   .filters {
     position: fixed;
@@ -546,6 +579,12 @@
   <div class="profile-menu" id="profileMenu" hidden></div>
 
   <div class="filters" id="filters"></div>
+  <button class="sound-btn" id="shareBtn" style="right:128px" title="Share" aria-label="Share">
+    <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true">
+      <path d="M12 3l4 4h-3v8h-2V7H8l4-4zM5 13v6c0 1.1.9 2 2 2h10c1.1 0 2-.9 2-2v-6h-2v6H7v-6H5z"/>
+    </svg>
+  </button>
+  <div class="profile-menu share-menu" id="shareMenu" hidden></div>
   <button class="sound-btn" id="soundBtn" title="Toggle scroll sound" aria-label="Mute scroll sound">
     <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true">
       <path class="ic-on" d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/>
@@ -556,6 +595,19 @@
 
   <div class="events" id="events"></div>
   <div class="empty" id="empty" hidden>No events yet — tap + to add one</div>
+
+  <div class="toast" id="toast"></div>
+
+  <div class="overlay" id="importOverlay">
+    <div class="modal">
+      <h2>Import shared timeline?</h2>
+      <p id="importBody" style="font-size:0.92rem;color:var(--muted);line-height:1.45;margin-bottom:8px"></p>
+      <div class="actions">
+        <button type="button" class="btn-cancel" id="importCancel">Cancel</button>
+        <button type="button" class="btn-save" id="importYes">Import</button>
+      </div>
+    </div>
+  </div>
 
   <div class="overlay" id="overlay">
     <form class="modal" id="form">
@@ -1405,6 +1457,134 @@
     var btn = document.getElementById("profileBtn");
     if (!menu.contains(e.target) && !btn.contains(e.target)) menu.hidden = true;
   });
+
+  // ---- Share / backup / import -----------------------------------------
+  function showToast(msg) {
+    var t = document.getElementById("toast");
+    t.textContent = msg;
+    t.classList.add("show");
+    clearTimeout(t._timer);
+    t._timer = setTimeout(function () { t.classList.remove("show"); }, 2200);
+  }
+
+  function buildShareUrl() {
+    var payload = { from: currentUser().name, events: events, customCats: customCats };
+    var encoded = btoa(encodeURIComponent(JSON.stringify(payload)));
+    var base = location.href.split("#")[0];
+    return base + "#tl=" + encoded;
+  }
+
+  function shareOrCopy(title, url, copyMsg) {
+    var copy = function () {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(url)
+          .then(function () { showToast(copyMsg || "Link copied"); })
+          .catch(function () { showToast("Couldn't copy"); });
+      } else { showToast("Couldn't copy"); }
+    };
+    if (navigator.share) {
+      navigator.share({ title: title, url: url }).catch(function (e) {
+        if (!e || e.name !== "AbortError") copy(); // user cancel → do nothing
+      });
+    } else copy();
+  }
+
+  function downloadBackup() {
+    var u = currentUser();
+    var data = JSON.stringify({ user: u.name, exportedAt: new Date().toISOString(), events: events }, null, 2);
+    var blob = new Blob([data], { type: "application/json" });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement("a");
+    a.href = url;
+    a.download = "timeline-" + u.id + "-" + new Date().toISOString().slice(0, 10) + ".json";
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+    showToast("Backup downloaded");
+  }
+
+  function buildShareItem(label, sub, onClick) {
+    var it = document.createElement("div");
+    it.className = "item";
+    var av = document.createElement("span"); av.className = "avatar"; av.textContent = sub || "·";
+    var lb = document.createElement("span"); lb.textContent = label;
+    it.appendChild(av); it.appendChild(lb);
+    it.addEventListener("click", function () { toggleShareMenu(false); onClick(); });
+    return it;
+  }
+  function renderShareMenu() {
+    var menu = document.getElementById("shareMenu");
+    menu.innerHTML = "";
+    menu.appendChild(buildShareItem("Share my timeline", "↗", function () {
+      shareOrCopy(currentUser().name + "'s timeline", buildShareUrl(), "Timeline link copied");
+    }));
+    menu.appendChild(buildShareItem("Share app link", "·", function () {
+      shareOrCopy("Timeline", location.href.split("#")[0], "App link copied");
+    }));
+    menu.appendChild(buildShareItem("Download backup", "↓", downloadBackup));
+  }
+  function toggleShareMenu(show) {
+    var menu = document.getElementById("shareMenu");
+    if (typeof show !== "boolean") show = menu.hidden;
+    if (show) { renderShareMenu(); menu.hidden = false; } else { menu.hidden = true; }
+  }
+  document.getElementById("shareBtn").addEventListener("click", function (e) {
+    e.stopPropagation();
+    toggleShareMenu();
+  });
+  document.addEventListener("click", function (e) {
+    var menu = document.getElementById("shareMenu");
+    if (menu.hidden) return;
+    if (!menu.contains(e.target) && !document.getElementById("shareBtn").contains(e.target)) menu.hidden = true;
+  });
+
+  // Import flow: if the URL hash carries a shared payload, offer to merge it.
+  function importPayload(payload) {
+    if (payload.customCats) {
+      Object.keys(payload.customCats).forEach(function (k) {
+        if (!customCats[k]) customCats[k] = payload.customCats[k];
+      });
+      saveCustomCats();
+      rebuildCats();
+      populateCategorySelect();
+    }
+    var shared = normalizeAll(payload.events);
+    var byId = {};
+    events.forEach(function (e) { byId[e.id] = e; });
+    var added = 0, updated = 0;
+    shared.forEach(function (s) {
+      if (byId[s.id]) { events[events.indexOf(byId[s.id])] = s; updated++; }
+      else { events.push(s); added++; }
+    });
+    save();
+    renderFilters();
+    render();
+    showToast("Imported " + added + " new · " + updated + " updated");
+  }
+  function runSharedHashCheck() {
+    var h = location.hash || "";
+    if (h.indexOf("#tl=") !== 0) return;
+    var payload;
+    try { payload = JSON.parse(decodeURIComponent(atob(h.substring(4)))); } catch (e) { return; }
+    if (!payload || !Array.isArray(payload.events)) return;
+    var ov = document.getElementById("importOverlay");
+    if (ov.classList.contains("open")) return; // already prompting
+    document.getElementById("importBody").textContent =
+      (payload.from ? payload.from + " shared " : "Shared ") + payload.events.length +
+      " event" + (payload.events.length === 1 ? "" : "s") +
+      " — import into your “" + currentUser().name + "” timeline?";
+    function close() {
+      ov.classList.remove("open");
+      try { history.replaceState(null, "", location.href.split("#")[0]); } catch (e) {}
+    }
+    document.getElementById("importCancel").onclick = close;
+    document.getElementById("importYes").onclick = function () { importPayload(payload); close(); };
+    ov.classList.add("open");
+  }
+  // Run now, on load (some navigations populate location.hash slightly late),
+  // and on hashchange (e.g. user pastes a share link into the URL bar).
+  runSharedHashCheck();
+  window.addEventListener("load", runSharedHashCheck);
+  window.addEventListener("hashchange", runSharedHashCheck);
 
   // ---- Boot -------------------------------------------------------------
   // Full PWA (offline) on a real origin like GitHub Pages. On third-party
