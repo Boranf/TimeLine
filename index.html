@@ -28,6 +28,7 @@
     --pill: rgba(255, 255, 255, 0.72);
     --del-bg: #ffe5e5;
     --del-fg: #d70015;
+    --past: #48484a;
     --wp-opacity: 0.08;
     --maxScale: 1.9;
     --minScale: 0.62;
@@ -46,6 +47,7 @@
       --pill: rgba(44, 44, 46, 0.72);
       --del-bg: rgba(255, 69, 58, 0.18);
       --del-fg: #ff453b;
+      --past: #8e8e93;
       --wp-opacity: 0.1;
     }
   }
@@ -213,10 +215,25 @@
   .event.is-active .countdown { display: block; }
   .event.is-active .dot { box-shadow: 0 0 0 7px var(--bg), 0 0 0 9px var(--cat, var(--accent)); }
 
-  /* Past events are de-emphasised */
+  /* Past events read as "done": dark gray with line-through */
   .event.is-past .date,
-  .event.is-past .title { color: var(--muted); }
-  .event.is-past .countdown { color: var(--muted); }
+  .event.is-past .title {
+    color: var(--past);
+    text-decoration: line-through;
+    text-decoration-thickness: 1px;
+    text-decoration-color: var(--past);
+  }
+  .event.is-past .location {
+    color: var(--past);
+    text-decoration: line-through;
+    text-decoration-color: var(--past);
+  }
+  .event.is-past .countdown { color: var(--past); }
+  .event.is-past .dot { background: var(--past); }
+  .event.is-past.is-active .dot {
+    box-shadow: 0 0 0 7px var(--bg), 0 0 0 9px var(--past);
+  }
+  .event.is-past .meta span { color: var(--past); border-color: var(--past); }
 
   /* TODAY marker on the rail (does not magnify) */
   .today-marker {
@@ -257,10 +274,98 @@
   }
   .empty[hidden] { display: none; }
 
-  /* Category filter bar, top-left */
+  /* Profile chip, top-left */
+  .profile-btn {
+    position: fixed;
+    top: 22px;
+    left: 20px;
+    z-index: 11;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 5px 14px 5px 5px;
+    border-radius: 999px;
+    background: var(--pill);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    border: 1px solid var(--line);
+    color: var(--ink);
+    cursor: pointer;
+    font-family: inherit;
+    font-size: 0.78rem;
+    font-weight: 600;
+    -webkit-tap-highlight-color: transparent;
+    max-width: 60vw;
+  }
+  .profile-btn:active { transform: scale(0.97); }
+  .profile-avatar {
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: #fff;
+    font-size: 0.66rem;
+    font-weight: 700;
+    flex: none;
+  }
+  .profile-name {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .profile-menu {
+    position: fixed;
+    top: 62px;
+    left: 20px;
+    z-index: 13;
+    min-width: 200px;
+    max-width: 76vw;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 6px;
+    box-shadow: 0 14px 38px rgba(0, 0, 0, 0.22);
+  }
+  .profile-menu[hidden] { display: none; }
+  .profile-menu .item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 10px;
+    border-radius: 9px;
+    cursor: pointer;
+    font-size: 0.88rem;
+    color: var(--ink);
+    -webkit-tap-highlight-color: transparent;
+  }
+  .profile-menu .item:hover { background: var(--chip); }
+  .profile-menu .item.is-current { font-weight: 700; }
+  .profile-menu .item .avatar {
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: #fff;
+    font-size: 0.66rem;
+    font-weight: 700;
+    flex: none;
+  }
+  .profile-menu .item.add-user { color: var(--today); font-weight: 600; }
+  .profile-menu .item.add-user .avatar {
+    background: transparent;
+    color: var(--today);
+    border: 1.5px dashed var(--today);
+  }
+
+  /* Category filter bar, top-left (below the profile chip) */
   .filters {
     position: fixed;
-    top: 24px;
+    top: 68px;
     left: 20px;
     z-index: 10;
     display: flex;
@@ -434,6 +539,12 @@
   <div class="wallpaper" id="wallpaper"></div>
   <div class="rail"></div>
 
+  <button class="profile-btn" id="profileBtn" title="Switch user" aria-label="Switch user">
+    <span class="profile-avatar" id="profileAvatar"></span>
+    <span class="profile-name" id="profileName"></span>
+  </button>
+  <div class="profile-menu" id="profileMenu" hidden></div>
+
   <div class="filters" id="filters"></div>
   <button class="sound-btn" id="soundBtn" title="Toggle scroll sound" aria-label="Mute scroll sound">
     <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true">
@@ -452,12 +563,14 @@
 
       <div class="field">
         <label for="title">Event</label>
-        <input id="title" type="text" placeholder="e.g. SCCA Laguna Seca" required />
+        <input id="title" type="text" list="title-suggestions" autocomplete="off" placeholder="e.g. SCCA Laguna Seca" required />
+        <datalist id="title-suggestions"></datalist>
       </div>
 
       <div class="field">
         <label for="location">Location <span class="opt">(optional)</span></label>
-        <input id="location" type="text" placeholder="e.g. Monterey, California" />
+        <input id="location" type="text" list="location-suggestions" autocomplete="off" placeholder="e.g. Monterey, California" />
+        <datalist id="location-suggestions"></datalist>
       </div>
 
       <div class="field">
@@ -518,7 +631,47 @@
   var STORE_KEY = "timeline.events.v1";
   var FIRED_KEY = "timeline.firedReminders.v1";
   var HIDDEN_KEY = "timeline.hiddenCats.v1";
+  var LAST_KEY = "timeline.lastFields.v1";
   var MONTHS = ["JAN","FEB","MAR","APR","MAY","JUN","JUL","AUG","SEP","OCT","NOV","DEC"];
+
+  // ---- Users / multi-profile (local) -----------------------------------
+  var USERS_KEY = "timeline.users.v1";
+  var CURRENT_USER_KEY = "timeline.currentUser.v1";
+  var USER_PALETTE = ["#0071e3","#34c759","#ff9500","#5856d6","#ff2d55","#00c7be","#af52de","#a2845e","#ff6482"];
+  var DEFAULT_USERS = [
+    { id: "company", name: "Company", color: "#1d1d1f" },
+    { id: "fuat",    name: "Fuat",    color: "#0071e3" },
+    { id: "jay",     name: "Jay",     color: "#34c759" },
+    { id: "kathy",   name: "Kathy",   color: "#ff9500" },
+    { id: "wade",    name: "Wade",    color: "#5856d6" }
+  ];
+  function loadUsers() {
+    try { var raw = localStorage.getItem(USERS_KEY); if (raw) return JSON.parse(raw); } catch (e) {}
+    return DEFAULT_USERS.slice();
+  }
+  function saveUsers() { try { localStorage.setItem(USERS_KEY, JSON.stringify(users)); } catch (e) {} }
+  function loadCurrentUser() {
+    try { var v = localStorage.getItem(CURRENT_USER_KEY); if (v) return v; } catch (e) {}
+    return users[0].id;
+  }
+  function saveCurrentUser() { try { localStorage.setItem(CURRENT_USER_KEY, currentUserId); } catch (e) {} }
+  function userKey(base) { return base + "." + currentUserId; }
+  function migrateUserNamespace() {
+    try { if (localStorage.getItem("timeline.migrated.v2")) return; } catch (e) { return; }
+    [STORE_KEY, "timeline.customCats.v1", HIDDEN_KEY, FIRED_KEY].forEach(function (base) {
+      try {
+        var v = localStorage.getItem(base);
+        if (v != null && localStorage.getItem(base + ".company") == null) {
+          localStorage.setItem(base + ".company", v);
+        }
+      } catch (e) {}
+    });
+    try { localStorage.setItem("timeline.migrated.v2", "1"); } catch (e) {}
+  }
+  var users = loadUsers();
+  var currentUserId = loadCurrentUser();
+  saveUsers();
+  migrateUserNamespace();
 
   var BUILTIN_CATS = {
     general:  { name: "General",  color: "#8e8e93" },
@@ -529,8 +682,8 @@
   };
   var CAT_PALETTE = ["#ff3b30","#ff9500","#ffcc00","#34c759","#30d158","#0071e3","#5856d6","#af52de","#ff2d55","#00c7be","#a2845e","#ff6482"];
   var CUSTOM_KEY = "timeline.customCats.v1";
-  function loadCustomCats() { try { return JSON.parse(localStorage.getItem(CUSTOM_KEY)) || {}; } catch (e) { return {}; } }
-  function saveCustomCats() { try { localStorage.setItem(CUSTOM_KEY, JSON.stringify(customCats)); } catch (e) {} }
+  function loadCustomCats() { try { return JSON.parse(localStorage.getItem(userKey(CUSTOM_KEY))) || {}; } catch (e) { return {}; } }
+  function saveCustomCats() { try { localStorage.setItem(userKey(CUSTOM_KEY), JSON.stringify(customCats)); } catch (e) {} }
   var customCats = loadCustomCats();
   var CATS = Object.assign({}, BUILTIN_CATS, customCats);
   function rebuildCats() { CATS = Object.assign({}, BUILTIN_CATS, customCats); }
@@ -633,19 +786,22 @@
 
   function load() {
     try {
-      var raw = localStorage.getItem(STORE_KEY);
+      var raw = localStorage.getItem(userKey(STORE_KEY));
       if (raw) return JSON.parse(raw);
     } catch (e) {}
-    return SEED.slice();
+    // Seed sample events for the shared Company timeline only.
+    return currentUserId === "company" ? SEED.slice() : [];
   }
   function save() {
-    try { localStorage.setItem(STORE_KEY, JSON.stringify(events)); } catch (e) {}
+    try { localStorage.setItem(userKey(STORE_KEY), JSON.stringify(events)); } catch (e) {}
   }
+  function loadLastFields() { try { return JSON.parse(localStorage.getItem(userKey(LAST_KEY))) || {}; } catch (e) { return {}; } }
+  function saveLastFields(o) { try { localStorage.setItem(userKey(LAST_KEY), JSON.stringify(o)); } catch (e) {} }
   function loadHidden() {
-    try { return JSON.parse(localStorage.getItem(HIDDEN_KEY)) || {}; } catch (e) { return {}; }
+    try { return JSON.parse(localStorage.getItem(userKey(HIDDEN_KEY))) || {}; } catch (e) { return {}; }
   }
   function saveHidden() {
-    try { localStorage.setItem(HIDDEN_KEY, JSON.stringify(hiddenCats)); } catch (e) {}
+    try { localStorage.setItem(userKey(HIDDEN_KEY), JSON.stringify(hiddenCats)); } catch (e) {}
   }
 
   function findById(id) {
@@ -767,13 +923,13 @@
     });
     if (firstUpcomingIdx < 0) firstUpcomingIdx = visible.length;
 
-    var todayMarker = makeTodayMarker();
+    var todayMarker = visible.length ? makeTodayMarker() : null;
 
     visible.forEach(function (ev, i) {
-      if (i === firstUpcomingIdx) eventsEl.appendChild(todayMarker);
+      if (todayMarker && i === firstUpcomingIdx) eventsEl.appendChild(todayMarker);
       eventsEl.appendChild(buildEvent(ev, currentYear));
     });
-    if (firstUpcomingIdx >= visible.length) eventsEl.appendChild(todayMarker);
+    if (todayMarker && firstUpcomingIdx >= visible.length) eventsEl.appendChild(todayMarker);
 
     emptyEl.hidden = events.length > 0;
     prevActiveId = null; // suppress click on the first sample after re-render
@@ -854,10 +1010,13 @@
     if (chips.length) {
       var meta = document.createElement("div");
       meta.className = "meta";
+      var pastEvent = isPast(ev);
       chips.forEach(function (ch) {
         var span = document.createElement("span");
         span.textContent = ch.text;
-        if (ch.color) { span.style.color = ch.color; span.style.borderColor = ch.color; }
+        // Skip the category accent on past events so the .is-past CSS wins
+        // (otherwise inline styles override the gray "done" colour).
+        if (ch.color && !pastEvent) { span.style.color = ch.color; span.style.borderColor = ch.color; }
         meta.appendChild(span);
       });
       card.appendChild(meta);
@@ -952,7 +1111,6 @@
 
       var scale = minScale + (maxScale - minScale) * falloff;
       var opacity = 0.22 + 0.78 * falloff;
-      if (el.classList.contains("is-past")) opacity *= 0.5;
 
       el.style.transform = "scale(" + scale.toFixed(3) + ")";
       el.style.opacity = opacity.toFixed(3);
@@ -995,6 +1153,14 @@
     saveBtn.textContent = "Add";
     deleteBtn.hidden = true;
     fillForm(null);
+    // Carry forward the last-used picks so you don't re-enter the same
+    // category/repeat/remind every time.
+    var last = loadLastFields();
+    if (last.category && CATS[last.category]) fCategory.value = last.category;
+    if (last.repeat) fRepeat.value = last.repeat;
+    if (last.remind) fRemind.value = last.remind;
+    lastCategory = fCategory.value;
+    populateSuggestions();
     overlay.classList.add("open");
     fTitle.focus();
   }
@@ -1007,6 +1173,7 @@
     saveBtn.textContent = "Save";
     deleteBtn.hidden = false;
     fillForm(ev);
+    populateSuggestions();
     overlay.classList.add("open");
     fTitle.focus();
   }
@@ -1067,6 +1234,7 @@
     }
 
     save();
+    saveLastFields({ category: fields.category, repeat: fields.repeat, remind: fields.remind });
     maybeRequestNotify(fields.remind);
     renderFilters();
     render();
@@ -1083,10 +1251,10 @@
 
   // ---- Reminders (best-effort while the page is open) -------------------
   function loadFired() {
-    try { return JSON.parse(localStorage.getItem(FIRED_KEY)) || {}; } catch (e) { return {}; }
+    try { return JSON.parse(localStorage.getItem(userKey(FIRED_KEY))) || {}; } catch (e) { return {}; }
   }
   function saveFired(obj) {
-    try { localStorage.setItem(FIRED_KEY, JSON.stringify(obj)); } catch (e) {}
+    try { localStorage.setItem(userKey(FIRED_KEY), JSON.stringify(obj)); } catch (e) {}
   }
   function maybeRequestNotify(remind) {
     if (remind && remind !== "none" && "Notification" in window && Notification.permission === "default") {
@@ -1127,6 +1295,117 @@
   }
   setInterval(checkReminders, 30000);
 
+  // ---- Autocomplete suggestions ----------------------------------------
+  function populateSuggestions() {
+    var titles = {}, locs = {};
+    events.forEach(function (ev) {
+      if (ev.title) titles[ev.title] = true;
+      if (ev.location) locs[ev.location] = true;
+    });
+    function fill(id, set) {
+      var dl = document.getElementById(id);
+      if (!dl) return;
+      dl.innerHTML = "";
+      Object.keys(set).sort().forEach(function (v) {
+        var o = document.createElement("option");
+        o.value = v;
+        dl.appendChild(o);
+      });
+    }
+    fill("title-suggestions", titles);
+    fill("location-suggestions", locs);
+  }
+
+  // ---- User profile UI -------------------------------------------------
+  function currentUser() {
+    for (var i = 0; i < users.length; i++) if (users[i].id === currentUserId) return users[i];
+    return users[0];
+  }
+  function initialFor(name) { return (name || "?").trim().charAt(0).toUpperCase(); }
+  function renderProfileChip() {
+    var u = currentUser();
+    var av = document.getElementById("profileAvatar");
+    var nm = document.getElementById("profileName");
+    av.style.background = u.color;
+    av.textContent = initialFor(u.name);
+    nm.textContent = u.name;
+  }
+  function renderProfileMenu() {
+    var menu = document.getElementById("profileMenu");
+    menu.innerHTML = "";
+    users.forEach(function (u) {
+      var it = document.createElement("div");
+      it.className = "item" + (u.id === currentUserId ? " is-current" : "");
+      var av = document.createElement("span");
+      av.className = "avatar"; av.style.background = u.color; av.textContent = initialFor(u.name);
+      var lb = document.createElement("span"); lb.textContent = u.name;
+      it.appendChild(av); it.appendChild(lb);
+      it.addEventListener("click", function () { switchUser(u.id); });
+      menu.appendChild(it);
+    });
+    var add = document.createElement("div");
+    add.className = "item add-user";
+    var av2 = document.createElement("span"); av2.className = "avatar"; av2.textContent = "+";
+    var lb2 = document.createElement("span"); lb2.textContent = "Add user…";
+    add.appendChild(av2); add.appendChild(lb2);
+    add.addEventListener("click", addUserFlow);
+    menu.appendChild(add);
+  }
+  function toggleProfileMenu(show) {
+    var menu = document.getElementById("profileMenu");
+    if (typeof show !== "boolean") show = menu.hidden;
+    if (show) { renderProfileMenu(); menu.hidden = false; } else { menu.hidden = true; }
+  }
+  function pickUserColor() {
+    var used = {};
+    users.forEach(function (u) { used[u.color.toLowerCase()] = true; });
+    for (var i = 0; i < USER_PALETTE.length; i++) {
+      if (!used[USER_PALETTE[i].toLowerCase()]) return USER_PALETTE[i];
+    }
+    return USER_PALETTE[users.length % USER_PALETTE.length];
+  }
+  function switchUser(uid) {
+    toggleProfileMenu(false);
+    if (uid === currentUserId) return;
+    currentUserId = uid;
+    saveCurrentUser();
+    customCats = loadCustomCats();
+    rebuildCats();
+    populateCategorySelect();
+    hiddenCats = loadHidden();
+    events = normalizeAll(load());
+    renderProfileChip();
+    renderFilters();
+    render();
+    requestAnimationFrame(function () {
+      if (!nodes.length) return;
+      var idx = Math.min(firstUpcomingIdx, nodes.length - 1);
+      nodes[idx].scrollIntoView({ block: "center" });
+      requestUpdate();
+    });
+  }
+  function addUserFlow() {
+    toggleProfileMenu(false);
+    var name = (window.prompt("New user name") || "").trim();
+    if (!name) return;
+    var base = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || ("user" + Date.now());
+    var id = base, n = 2;
+    while (users.some(function (u) { return u.id === id; })) { id = base + "-" + n; n++; }
+    users.push({ id: id, name: name, color: pickUserColor() });
+    saveUsers();
+    switchUser(id);
+  }
+  document.getElementById("profileBtn").addEventListener("click", function (e) {
+    e.stopPropagation();
+    toggleProfileMenu();
+  });
+  document.addEventListener("click", function (e) {
+    var menu = document.getElementById("profileMenu");
+    if (menu.hidden) return;
+    var btn = document.getElementById("profileBtn");
+    if (!menu.contains(e.target) && !btn.contains(e.target)) menu.hidden = true;
+  });
+
   // ---- Boot -------------------------------------------------------------
   // Full PWA (offline) on a real origin like GitHub Pages. On third-party
   // render proxies (githack/jsDelivr/etc.) skip and clean up any worker so
@@ -1159,6 +1438,7 @@
     })(0);
   })();
 
+  renderProfileChip();
   renderFilters();
   render();
   checkReminders();
